@@ -24,7 +24,7 @@ class ObjectCounter:
         count_bg_color=(255, 255, 255),
         line_thickness=2,
         track_thickness=2,
-        view_img=False,
+        view_img=True,
         view_in_counts=True,
         view_out_counts=True,
         draw_tracks=False,
@@ -85,7 +85,7 @@ class ObjectCounter:
         self.count_txt_color = count_txt_color
         self.count_bg_color = count_bg_color
         self.cls_txtdisplay_gap = cls_txtdisplay_gap
-        self.fontsize = 0.6
+        self.fontsize = 0.2
 
         # Tracks info
         self.track_history = defaultdict(list)
@@ -180,7 +180,7 @@ class ObjectCounter:
 
                 # Count objects in any polygon
                 if len(self.reg_pts) >= 3:
-                    is_inside = self.counting_region.contains(Point(track_line[-1]))
+                    is_inside = self.counting_region.contains(Point(track_line[-1])) #Latest point of the trackline
 
                     if prev_position is not None and is_inside and track_id not in self.count_ids:
                         self.count_ids.append(track_id)
@@ -220,7 +220,7 @@ class ObjectCounter:
                     labels_dict[str.capitalize(key)] = f"IN {value['IN']} OUT {value['OUT']}"
 
         if labels_dict:
-            self.annotator.display_analytics(self.im0, labels_dict, self.count_txt_color, self.count_bg_color, 10)
+            self.annotator.display_analytics(self.im0, labels_dict, self.count_txt_color, self.count_bg_color, 1)
 
     def display_frames(self):
         """Displays the current frame with annotations and regions in a window."""
