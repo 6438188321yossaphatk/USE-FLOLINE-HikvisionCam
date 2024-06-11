@@ -93,7 +93,7 @@ while cap.isOpened():
     num_left = counter.out_counts
 
     # Send data to Modbus server
-    #send_modbus_data(num_entered, num_left)
+    send_modbus_data(num_entered, num_left)
 
     # Send frame to HTTP server
     _, buffer = cv2.imencode('.jpg', im0_resized)
