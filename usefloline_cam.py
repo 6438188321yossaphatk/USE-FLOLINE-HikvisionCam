@@ -1,13 +1,15 @@
 import cv2
+from datetime import datetime
 from ultralytics import YOLO, solutions
 import requests
 from pymodbus.client import ModbusTcpClient
+import os
 
 # Load the YOLO model
 model = YOLO("yolov8n.pt")
 
 # Open the webcam feed
-source =  "rtsp://admin:sec0mmth@192.168.254.14:554/Streaming/Channels/101"  # Add your stream sources here
+source = "rtsp://admin:sec0mmth@192.168.254.14:554/Streaming/Channels/101"  # Add your stream sources here
 cap = cv2.VideoCapture(source)
 if not cap.isOpened():
     print("Error: Could not open video stream.")
@@ -20,39 +22,11 @@ modbus_server_port = 502  # Default Modbus TCP port
 # Define the server endpoint for HTTP frame upload
 server_url = "http://192.168.40.185:5432/upload_frame"
 
-def send_modbus_data(num_entered, num_left):
-    # Create a Modbus TCP client
-    client = ModbusTcpClient(modbus_server_address, port=modbus_server_port)
-    
-    try:
-        # Connect to the server
-        if client.connect():
-            print("Connected to Modbus server")
-
-            # Address to write the data (you can customize as needed)
-            address = 2000  # Start address for holding register
-            values = [num_entered, num_left]
-
-            # Convert the values to 16-bit integers
-            registers = [int(val) for val in values]
-            
-            # Write the data to the server (holding registers)
-            response = client.write_registers(address, registers)
-            if response.isError():
-                print("Error writing to Modbus server")
-            else:
-                print(f"Data sent to Modbus: Entered={num_entered}, Left={num_left}")
-        else:
-            print("Unable to connect to Modbus server")
-    finally:
-        # Clean up the connection
-        client.close()
-
 # Get video properties
 original_w, original_h, fps = (int(cap.get(x)) for x in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT, cv2.CAP_PROP_FPS))
 
 # Reduce frame size for processing
-processing_scale = 0.15
+processing_scale = 0.3
 w = int(original_w * processing_scale)
 h = int(original_h * processing_scale)
 w1 = int(w * 0.2)
@@ -72,6 +46,17 @@ counter = solutions.ObjectCounter(
 frame_skip = 20  # Process every 2nd frame
 frame_count = 0
 
+# Define the directory to save recordings
+recordings_dir = 'recordings'
+os.makedirs(recordings_dir, exist_ok=True)
+
+# Define the video writer
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+now = datetime.now()
+video_filename = f"{now.strftime('%Y-%m-%d_%H-%M-%S')}.mp4"
+video_path = os.path.join(recordings_dir, video_filename)
+out = cv2.VideoWriter(video_path, fourcc, 20, (w, h))  # Set the playback speed to 30 fps
+
 while cap.isOpened():
     success, im0 = cap.read()
     if not success:
@@ -87,13 +72,13 @@ while cap.isOpened():
 
     # Start counting
     im0_resized = counter.start_counting(im0_resized, tracks)
-    
+
     # Extract the counts directly from the counter object
     num_entered = counter.in_counts
     num_left = counter.out_counts
 
-    # Send data to Modbus server
-    send_modbus_data(num_entered, num_left)
+    # Write the frame to the video
+    out.write(im0_resized)
 
     # Send frame to HTTP server
     _, buffer = cv2.imencode('.jpg', im0_resized)
@@ -112,3 +97,8 @@ while cap.isOpened():
 # Release resources
 cap.release()
 cv2.destroyAllWindows()
+
+# Release the video writer
+out.release()
+
+print(f"Video saved: {video_path}")
