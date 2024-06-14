@@ -38,7 +38,7 @@ pycocotools==2.0.6
 pymodbus==3.6.8
 pytest==8.2.2
 pytube==15.0.0
-PyYAML==6.0
+PyYAML==6.0.1
 PyYAML==6.0.1
 ray==2.24.0
 Requests==2.32.3
