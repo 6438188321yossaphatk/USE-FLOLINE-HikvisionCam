@@ -28,6 +28,6 @@ Shapely==2.0.4
 super_gradients
 tensorflow==2.16.1
 torch==2.3.0
-torchvision==0.18.0
+torchvision==0.18.1
 tqdm==4.66.4
 ultralytics_thop==0.2.7
