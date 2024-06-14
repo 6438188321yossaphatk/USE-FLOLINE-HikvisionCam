@@ -50,6 +50,7 @@ pip install -r requirements.txt
 
 1. Run the program:
 ```bash
+#cd into the directory containing this file first
 python usefloline_cam.py
 ```
 
