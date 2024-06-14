@@ -60,4 +60,4 @@ def index():
     return "Server is running. Send frames to /upload_frame and view the feed at /video_feed."
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=4444)

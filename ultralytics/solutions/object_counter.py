@@ -1,14 +1,11 @@
 # Ultralytics YOLO 🚀, AGPL-3.0 license
 
-from collections import defaultdict
-
+from collections import defaultdict, deque
 import cv2
-
 from ultralytics.utils.checks import check_imshow, check_requirements
 from ultralytics.utils.plotting import Annotator, colors
 
 check_requirements("shapely>=2.0.0")
-
 from shapely.geometry import LineString, Point, Polygon
 
 
@@ -24,7 +21,7 @@ class ObjectCounter:
         count_bg_color=(255, 255, 255),
         line_thickness=2,
         track_thickness=2,
-        view_img=True,
+        view_img=False,
         view_in_counts=True,
         view_out_counts=True,
         draw_tracks=False,
@@ -32,6 +29,7 @@ class ObjectCounter:
         region_thickness=5,
         line_dist_thresh=15,
         cls_txtdisplay_gap=50,
+        track_history_length=15,  # New parameter for the length of track history to consider
     ):
         """
         Initializes the ObjectCounter with various tracking and counting parameters.
@@ -52,6 +50,7 @@ class ObjectCounter:
             region_thickness (int): Thickness of the object counting region.
             line_dist_thresh (int): Euclidean distance threshold for line counter.
             cls_txtdisplay_gap (int): Display gap between each class count.
+            track_history_length (int): Number of past positions to keep for trajectory analysis.
         """
 
         # Mouse events
@@ -85,10 +84,10 @@ class ObjectCounter:
         self.count_txt_color = count_txt_color
         self.count_bg_color = count_bg_color
         self.cls_txtdisplay_gap = cls_txtdisplay_gap
-        self.fontsize = 0.2
+        self.fontsize = 0.6
 
         # Tracks info
-        self.track_history = defaultdict(list)
+        self.track_history = defaultdict(lambda: deque(maxlen=track_history_length))
         self.track_thickness = track_thickness
         self.draw_tracks = draw_tracks
         self.track_color = track_color
@@ -165,46 +164,52 @@ class ObjectCounter:
                 # Draw Tracks
                 track_line = self.track_history[track_id]
                 track_line.append((float((box[0] + box[2]) / 2), float((box[1] + box[3]) / 2)))
-                if len(track_line) > 30:
-                    track_line.pop(0)
-
+                
                 # Draw track trails
                 if self.draw_tracks:
                     self.annotator.draw_centroid_and_tracks(
                         track_line,
-                        color=self.track_color or colors(int(track_id), True),
+                        color=self.track_color if self.track_color else colors(int(track_id), True),
                         track_thickness=self.track_thickness,
                     )
 
-                prev_position = self.track_history[track_id][-2] if len(self.track_history[track_id]) > 1 else None
+                # Refine movement detection using track history
+                if len(track_line) > 1:
+                    current_position = Point(track_line[-1])
+                    previous_position = Point(track_line[-2])
 
-                # Count objects in any polygon
-                if len(self.reg_pts) >= 3:
-                    is_inside = self.counting_region.contains(Point(track_line[-1])) #Latest point of the trackline
+                    # Check if it crosses the line or region
+                    if len(self.reg_pts) == 2:
+                        # Line based counting
+                        distance_to_line = self.counting_region.distance(current_position)
 
-                    if prev_position is not None and is_inside and track_id not in self.count_ids:
-                        self.count_ids.append(track_id)
-
-                        if (box[0] - prev_position[0]) * (self.counting_region.centroid.x - prev_position[0]) > 0:
-                            self.in_counts += 1
-                            self.class_wise_count[self.names[cls]]["IN"] += 1
-                        else:
-                            self.out_counts += 1
-                            self.class_wise_count[self.names[cls]]["OUT"] += 1
-
-                # Count objects using line
-                elif len(self.reg_pts) == 2:
-                    if prev_position is not None and track_id not in self.count_ids:
-                        distance = Point(track_line[-1]).distance(self.counting_region)
-                        if distance < self.line_dist_thresh and track_id not in self.count_ids:
-                            self.count_ids.append(track_id)
-
-                            if (box[0] - prev_position[0]) * (self.counting_region.centroid.x - prev_position[0]) > 0:
+                        if distance_to_line < self.line_dist_thresh and track_id not in self.count_ids:
+                            # Determine the direction of movement relative to the line
+                            movement_direction = current_position.y - previous_position.y
+                            if movement_direction < 0:  # Object moving upwards
                                 self.in_counts += 1
                                 self.class_wise_count[self.names[cls]]["IN"] += 1
-                            else:
+                            else:  # Object moving downwards
                                 self.out_counts += 1
                                 self.class_wise_count[self.names[cls]]["OUT"] += 1
+                            self.count_ids.append(track_id)
+
+                    elif len(self.reg_pts) >= 3:
+                        # Polygon based counting
+                        is_inside = self.counting_region.contains(current_position)
+                        if is_inside and track_id not in self.count_ids:
+                            # Determine the movement by examining the position history
+                            history_length = min(len(track_line), 5)  # Use the last 5 positions for direction check
+                            directions = [track_line[i+1][1] - track_line[i][1] for i in range(-history_length, -1)]
+                            avg_direction = sum(directions) / history_length
+                            
+                            if avg_direction < 0:  # Moving in
+                                self.in_counts += 1
+                                self.class_wise_count[self.names[cls]]["IN"] += 1
+                            else:  # Moving out
+                                self.out_counts += 1
+                                self.class_wise_count[self.names[cls]]["OUT"] += 1
+                            self.count_ids.append(track_id)
 
         labels_dict = {}
 
@@ -220,7 +225,7 @@ class ObjectCounter:
                     labels_dict[str.capitalize(key)] = f"IN {value['IN']} OUT {value['OUT']}"
 
         if labels_dict:
-            self.annotator.display_analytics(self.im0, labels_dict, self.count_txt_color, self.count_bg_color, 1)
+            self.annotator.display_analytics(self.im0, labels_dict, self.count_txt_color, self.count_bg_color, 10)
 
     def display_frames(self):
         """Displays the current frame with annotations and regions in a window."""
@@ -247,6 +252,12 @@ class ObjectCounter:
         if self.view_img:
             self.display_frames()
         return self.im0
+    
+    def reset_counts(self):
+        self.in_counts = 0
+        self.out_counts = 0
+        self.count_ids = []
+        self.class_wise_count = {}
 
 
 if __name__ == "__main__":
