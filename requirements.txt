@@ -13,7 +13,7 @@ openai==1.34.0
 opencv_python
 openvino==2024.1.0
 pafy==0.5.5
-pandas==1.5.3
+pandas==2.2.2
 Pillow
 protobuf==3.20.3
 psutil==5.9.8
