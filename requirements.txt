@@ -6,7 +6,7 @@ dill==0.3.8
 Flask==1.1.2
 flatbuffers==24.3.25
 hub_sdk==0.0.8
-ipython==8.12.3
+ipython==8.26.0
 matplotlib==3.4.2
 numpy
 openai==1.34.0
